@@ -53,20 +53,21 @@ function collectCoins(lat: number, lng: number) {
         playerInventory += cache.coins;
         cache.coins = 0;  // All coins collected
         updateStatusPanel(`Collected coins! Inventory: ${playerInventory}`);
-        refreshPopupContent(cache);  // Update the popup to show 0 coins
+        showCacheDetails(cache); // Refresh cacheDetailPanel
+        refreshPopupContent(cache);
     } else {
         updateStatusPanel("No coins to collect here!");
     }
 }
 
-// Function to deposit coins into a cache
 function depositCoins(lat: number, lng: number) {
     const cache = cacheLocations.find(c => c.lat === lat && c.lng === lng);
     if (cache && playerInventory > 0) {
         cache.coins += playerInventory;
-        playerInventory = 0;  // All coins deposited
+        playerInventory = 0;  // All coins deposited 
         updateStatusPanel("Deposited coins!");
-        refreshPopupContent(cache);  // Update the popup to show new coin count
+        showCacheDetails(cache); // Refresh cacheDetailPanel
+        refreshPopupContent(cache);
     } else {
         updateStatusPanel("No coins to deposit!");
     }
