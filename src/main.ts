@@ -2,7 +2,7 @@ import L from 'leaflet';
 import "./style.css";
 import "leaflet/dist/leaflet.css";
 import "./leafletWorkaround.ts";
-
+//
 // Player's initial location at Oakes College
 const playerInitialLocation = { lat: 36.9895, lng: -122.0628 };  // 36°59'22.2"N 122°03'46.0"W
 
