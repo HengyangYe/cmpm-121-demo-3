@@ -72,24 +72,25 @@ class Cache {
 
 class CacheManager {
     private readonly caches: Map<string, Cache> = new Map();
-    private readonly mementos: Map<string, string> = new Map(); // Store mementos for each cache
+    private readonly mementos: Map<string, string> = new Map();
 
-    public getCache(lat: number, lng: number): Cache {
+    public getCache(lat: number, lng: number): Cache | null {
         const cell = board.getCanonicalCell(lat, lng);
         const key = `${cell.i},${cell.j}`;
-        if (!this.caches.has(key)) {
+
+        // If the cache already exists, return it
+        if (this.caches.has(key)) {
+            return this.caches.get(key)!;
+        }
+
+        if (Math.random() < 0.1) {
             const coins = createCoinsForCache(lat, lng, Math.floor(Math.random() * 5) + 1);
             const cache = new Cache(lat, lng, coins);
             this.caches.set(key, cache);
+            return cache;
         }
-        return this.caches.get(key)!;
-    }
 
-    public saveCacheState(lat: number, lng: number): void {
-        const cache = this.getCache(lat, lng);
-        const cell = board.getCanonicalCell(lat, lng);
-        const key = `${cell.i},${cell.j}`;
-        this.mementos.set(key, cache.toMemento());
+        return null;
     }
 
     public restoreCacheState(lat: number, lng: number): void {
@@ -107,7 +108,12 @@ class CacheManager {
             for (let j = -radius; j <= radius; j++) {
                 const nearbyLat = lat + i * gridSize;
                 const nearbyLng = lng + j * gridSize;
-                result.push(this.getCache(nearbyLat, nearbyLng));
+                const cache = this.getCache(nearbyLat, nearbyLng);
+
+                // Only add non-null caches to the result
+                if (cache !== null) {
+                    result.push(cache);
+                }
             }
         }
         return result;
@@ -170,22 +176,21 @@ function refreshPopupContent(cache: Cache) {
 function updateVisibleCaches() {
     map.eachLayer(layer => {
         if (layer instanceof L.Marker && layer !== playerMarker) {
-            const { lat, lng } = (layer as L.Marker).getLatLng();
-            cacheManager.saveCacheState(lat, lng); // Save the state before removing it
             map.removeLayer(layer);
         }
     });
 
     const nearbyCaches = cacheManager.getCachesNear(currentPlayerLocation.lat, currentPlayerLocation.lng, 8);
     nearbyCaches.forEach(cache => {
-        cacheManager.restoreCacheState(cache.lat, cache.lng); // Restore the cache state
-        const marker = L.marker([cache.lat, cache.lng]).addTo(map);
-        marker.bindPopup(`
-            <div>Coins: ${cache.coins.length}</div>
-            <button onclick="collectCoins(${cache.lat}, ${cache.lng})">Collect</button>
-            <button onclick="depositCoins(${cache.lat}, ${cache.lng})">Deposit</button>
-        `);
-        marker.on('click', () => showCacheDetails(cache));
+        if (cache) { 
+            const marker = L.marker([cache.lat, cache.lng]).addTo(map);
+            marker.bindPopup(`
+                <div>Coins: ${cache.coins.length}</div>
+                <button onclick="collectCoins(${cache.lat}, ${cache.lng})">Collect</button>
+                <button onclick="depositCoins(${cache.lat}, ${cache.lng})">Deposit</button>
+            `);
+            marker.on('click', () => showCacheDetails(cache));
+        }
     });
 }
 
@@ -217,18 +222,143 @@ function updateStatusPanel(message: string) {
     }
 }
 
+let isAutoUpdating = false;
+let watchId: number | null = null;
+
+// Enable or disable automatic geolocation 
+function toggleGeolocation() {
+    if (isAutoUpdating) {
+        if (watchId !== null) navigator.geolocation.clearWatch(watchId);
+        isAutoUpdating = false;
+        updateStatusPanel("Geolocation updates disabled.");
+    } else {
+        if (!navigator.geolocation) {
+            updateStatusPanel("Geolocation is not supported by your browser.");
+            return;
+        }
+        watchId = navigator.geolocation.watchPosition(
+            position => {
+                currentPlayerLocation.lat = position.coords.latitude;
+                currentPlayerLocation.lng = position.coords.longitude;
+                movePlayerToLocation(currentPlayerLocation.lat, currentPlayerLocation.lng);
+                updateStatusPanel("Geolocation updates enabled.");
+            },
+            error => {
+                updateStatusPanel(`Geolocation error: ${error.message}`);
+            }
+        );
+        isAutoUpdating = true;
+    }
+}
+
+document.getElementById('geolocation')?.addEventListener('click', () => {
+    console.log("Geolocation button clicked!");
+    toggleGeolocation();
+});
+
+// Move the player to a specific location
+function movePlayerToLocation(lat: number, lng: number) {
+    currentPlayerLocation.lat = lat;
+    currentPlayerLocation.lng = lng;
+    playerMarker.setLatLng([lat, lng]);
+    updateVisibleCaches();
+    renderMovementHistory();
+}
+
+// Add event listener for 🌐 button
+document.getElementById('geolocation')?.addEventListener('click', toggleGeolocation);
+
+// Save game state to localStorage
+function saveGameState() {
+    const state = {
+        playerLocation: currentPlayerLocation,
+        caches: Array.from(cacheManager['caches'].entries()).map(([key, cache]) => ({
+            key,
+            lat: cache.lat,
+            lng: cache.lng,
+            coins: cache.coins,
+        })),
+    };
+    localStorage.setItem('gameState', JSON.stringify(state));
+}
+
+// Load game state from localStorage
+function loadGameState() {
+    const savedState = localStorage.getItem('gameState');
+    if (savedState) {
+        const state = JSON.parse(savedState);
+        currentPlayerLocation = state.playerLocation;
+        state.caches.forEach((cacheData: any) => {
+            const cache = new Cache(cacheData.lat, cacheData.lng, cacheData.coins);
+            cacheManager['caches'].set(cacheData.key, cache);
+        });
+        movePlayerToLocation(currentPlayerLocation.lat, currentPlayerLocation.lng);
+    }
+}
+
+window.addEventListener('load', loadGameState);
+window.addEventListener('beforeunload', saveGameState);
+
+let movementHistory: L.LatLng[] = [];
+let movementPolyline: L.Polyline | null = null;
+
+// Render movement history as a polyline
+function renderMovementHistory() {
+    movementHistory.push(L.latLng(currentPlayerLocation.lat, currentPlayerLocation.lng));
+    if (movementPolyline) {
+        map.removeLayer(movementPolyline);
+    }
+    movementPolyline = L.polyline(movementHistory, { color: 'blue' }).addTo(map);
+}
+
+// Reset game state
+function resetGameState() {
+    const confirmation = prompt("Are you sure you want to reset the game? This will erase all progress and location history. (Yes/No)");
+    if (confirmation && confirmation.toLowerCase() === 'yes') {
+        movementHistory = [];
+        if (movementPolyline) map.removeLayer(movementPolyline);
+        movementPolyline = null;
+
+        cacheManager['caches'].clear();
+        updateVisibleCaches();
+
+        movePlayerToLocation(playerInitialLocation.lat, playerInitialLocation.lng);
+
+        localStorage.removeItem('gameState');
+
+        updateStatusPanel("Game state has been reset.");
+    }
+}
+
+// Add event listener for 🚮 button
+document.getElementById('reset')?.addEventListener('click', resetGameState);
+
+// Center the map on a coin's home cache
+function centerMapOnCoin(coin: Coin) {
+    const cache = cacheManager.getCache(coin.i * gridSize, coin.j * gridSize);
+    if (cache) {
+        map.setView([cache.lat, cache.lng], 15);
+        updateStatusPanel(`Centered on cache: i=${coin.i}, j=${coin.j}`);
+    }
+}
+
+// Update cache details to include clickable coin identifiers
 function showCacheDetails(cache: Cache) {
     const cacheDetailPanel = document.getElementById('cacheDetailPanel');
     if (cacheDetailPanel) {
         cacheDetailPanel.innerHTML = `
             <h3>Cache Details</h3>
             <p><strong>Coordinates:</strong> i=${cache.coins[0]?.i || 'N/A'}, j=${cache.coins[0]?.j || 'N/A'}</p>
-            <p><strong>Coins:</strong> ${cache.coins.map(coin => `${coin.i}:${coin.j}#${coin.serial}`).join(', ') || 'No coins'}</p>
+            <p><strong>Coins:</strong> ${
+                cache.coins.length > 0 
+                    ? cache.coins.map(coin => `<span class="coin-link" onclick="centerMapOnCoin(${JSON.stringify(coin)})">${coin.i}:${coin.j}#${coin.serial}</span>`).join(', ')
+                    : 'No coins'
+            }</p>
         `;
         cacheDetailPanel.style.display = 'block';
     }
 }
 
-// Ensure collectCoins and depositCoins are globally accessible
+(window as any).centerMapOnCoin = centerMapOnCoin;
 (window as any).collectCoins = collectCoins;
 (window as any).depositCoins = depositCoins;
