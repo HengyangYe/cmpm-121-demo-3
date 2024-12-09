@@ -174,7 +174,7 @@ function refreshPopupContent(cache: Cache) {
 
 // Update visible caches near the player
 function updateVisibleCaches() {
-    map.eachLayer(layer => {
+    map.eachLayer((layer: any) => {
         if (layer instanceof L.Marker && layer !== playerMarker) {
             map.removeLayer(layer);
         }
