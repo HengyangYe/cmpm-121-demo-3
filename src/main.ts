@@ -1,4 +1,3 @@
-// main.ts
 import L from "leaflet";
 import "./style.css";
 import "leaflet/dist/leaflet.css";
