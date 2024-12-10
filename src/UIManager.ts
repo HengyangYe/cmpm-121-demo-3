@@ -14,17 +14,14 @@ export class UIManager {
     this.map = map;
     this.gameLogic = gameLogic;
 
-    // 初始化玩家标记
     this.playerMarker = L.marker([initialLocation.lat, initialLocation.lng]).addTo(this.map)
       .bindPopup("You are here!")
       .openPopup();
 
-    // 初始化事件监听器
     this.initEventListeners();
   }
 
   private initEventListeners() {
-    // 绑定全局函数以便在 HTML 的 onclick 中调用
     (window as any).centerMapOnCoin = this.centerMapOnCoin.bind(this);
     (window as any).collectCoins = this.collectCoins.bind(this);
     (window as any).depositCoins = this.depositCoins.bind(this);
@@ -91,7 +88,7 @@ export class UIManager {
     });
   }
 
-  public updateStatusPanel(message: string) { // 从 private 改为 public
+  public updateStatusPanel(message: string) { 
     const statusPanel = document.getElementById("statusPanel");
     if (statusPanel) {
       statusPanel.innerText = message;

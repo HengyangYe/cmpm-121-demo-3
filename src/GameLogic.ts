@@ -41,7 +41,7 @@ export class GameLogic {
     const cache = this.cacheManager.getCache(lat, lng);
     if (cache && cache.coins.length > 0) {
       this.playerInventory = this.playerInventory.concat(cache.coins);
-      cache.coins = []; // 清除缓存中的金币
+      cache.coins = []; 
       return { success: true, message: `Collected coins! Inventory: ${this.playerInventory.length}`, coins: this.playerInventory };
     } else {
       return { success: false, message: "No coins to collect here!" };
@@ -52,7 +52,7 @@ export class GameLogic {
     const cache = this.cacheManager.getCache(lat, lng);
     if (cache && this.playerInventory.length > 0) {
       cache.coins = cache.coins.concat(this.playerInventory);
-      this.playerInventory = []; // 清除玩家的库存
+      this.playerInventory = []; 
       return { success: true, message: "Deposited coins!", coins: cache.coins };
     } else {
       return { success: false, message: "No coins to deposit!" };

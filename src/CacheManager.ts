@@ -36,12 +36,10 @@ export class CacheManager implements ICacheManager {
     const cell = this.board.getCanonicalCell(lat, lng);
     const key = `${cell.i},${cell.j}`;
 
-    // 如果缓存已存在，返回它
     if (this.caches.has(key)) {
       return this.caches.get(key)!;
     }
 
-    // 以 10% 的概率创建新的缓存
     if (Math.random() < 0.1) {
       const coins = this.createCoinsForCache(lat, lng, Math.floor(Math.random() * 5) + 1);
       const cache = new Cache(lat, lng, coins);
@@ -69,7 +67,6 @@ export class CacheManager implements ICacheManager {
         const nearbyLng = lng + j * GRID_SIZE;
         const cache = this.getCache(nearbyLat, nearbyLng);
 
-        // 只将非空缓存添加到结果中
         if (cache !== null) {
           result.push(cache);
         }

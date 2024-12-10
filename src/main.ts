@@ -4,7 +4,7 @@ import "./style.css";
 import "leaflet/dist/leaflet.css";
 import "./leafletWorkaround.ts";
 import { Board } from "./Board";
-import { CacheManager, Cache } from "./CacheManager"; // 导入 Cache 类
+import { CacheManager, Cache } from "./CacheManager"; 
 import { Coin } from "./interfaces";
 import { GRID_SIZE } from "./constants";
 import { GameLogic } from "./GameLogic";
@@ -13,23 +13,22 @@ import { UIManager } from "./UIManager";
 // Player's initial location at Oakes College
 const playerInitialLocation = { lat: 36.9895, lng: -122.0628 }; // 36°59'22.2"N 122°03'46.0"W
 
-// 创建地图
 const map = L.map("map").setView([playerInitialLocation.lat, playerInitialLocation.lng], 15);
 L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
   maxZoom: 19,
 }).addTo(map);
 
-// 初始化 Board 和 CacheManager，使用依赖注入
+// Initialize the Board and CacheManager, using dependency injection.
 const board = new Board();
 const cacheManager = new CacheManager(board);
 
-// 初始化 GameLogic
+// Initialize GameLogic
 const gameLogic = new GameLogic(cacheManager, playerInitialLocation);
 
-// 初始化 UIManager
+// Initialize the UIManager
 const uiManager = new UIManager(map, gameLogic, playerInitialLocation);
 
-// 运动按钮的事件监听器
+// Event listener for motion buttons
 document.getElementById("north")?.addEventListener("click", () => {
   gameLogic.movePlayer("north");
   const newLocation = gameLogic.getPlayerLocation();
@@ -54,7 +53,7 @@ document.getElementById("west")?.addEventListener("click", () => {
   uiManager.updatePlayerPosition(newLocation);
 });
 
-// 启用或禁用自动地理定位
+// Enable or disable automatic geolocation
 let isAutoUpdating = false;
 let watchId: number | null = null;
 
@@ -88,7 +87,7 @@ document.getElementById("geolocation")?.addEventListener("click", () => {
   toggleGeolocation();
 });
 
-// 保存游戏状态到 localStorage
+// Save game state to localStorage
 function saveGameState() {
   const state = {
     playerLocation: gameLogic.getPlayerLocation(),
@@ -102,7 +101,7 @@ function saveGameState() {
   localStorage.setItem("gameState", JSON.stringify(state));
 }
 
-// 从 localStorage 加载游戏状态
+// Load game state from localStorage
 function loadGameState() {
   const savedState = localStorage.getItem("gameState");
   if (savedState) {
@@ -120,28 +119,25 @@ function loadGameState() {
 window.addEventListener("load", loadGameState);
 window.addEventListener("beforeunload", saveGameState);
 
-// 重置游戏状态
 function resetGameState() {
   const confirmation = prompt(
     "Are you sure you want to reset the game? This will erase all progress and location history. (Yes/No)",
   );
   if (confirmation && confirmation.toLowerCase() === "yes") {
-    // 清除运动历史
     if (uiManager) {
       uiManager.resetMovementHistory();
     }
 
-    // 清除缓存
     cacheManager.caches.clear();
 
-    // 移动玩家到初始位置
+    // Move the player to the initial position
     gameLogic.movePlayerToLocation(playerInitialLocation.lat, playerInitialLocation.lng);
     uiManager.updatePlayerPosition(playerInitialLocation);
 
-    // 清除 localStorage
+    // clear localStorage
     localStorage.removeItem("gameState");
 
-    // 更新状态面板
+    // Update Status Panel
     uiManager.updateStatusPanel("Game state has been reset.");
   }
 }

@@ -1,8 +1,8 @@
 // interfaces.ts
 
 export interface Cell {
-    i: number; // 网格单元行
-    j: number; // 网格单元列
+    i: number; 
+    j: number; 
   }
   
   export interface IBoard {
