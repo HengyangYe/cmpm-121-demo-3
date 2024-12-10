@@ -24,8 +24,8 @@ export class Cache implements ICache {
 }
 
 export class CacheManager implements ICacheManager {
-  private readonly caches: Map<string, ICache> = new Map();
-  private readonly mementos: Map<string, string> = new Map();
+  public caches: Map<string, ICache> = new Map(); // 保持为 public
+  private mementos: Map<string, string> = new Map();
   private board: IBoard;
 
   constructor(board: IBoard) {
