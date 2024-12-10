@@ -1,155 +1,41 @@
+// main.ts
 import L from "leaflet";
 import "./style.css";
 import "leaflet/dist/leaflet.css";
 import "./leafletWorkaround.ts";
+import { Board } from "./Board";
+import { CacheManager, Cache } from "./CacheManager"; // 导入 Cache 类
+import { Coin } from "./interfaces";
+import { GRID_SIZE } from "./constants";
 
 // Player's initial location at Oakes College
 const playerInitialLocation = { lat: 36.9895, lng: -122.0628 }; // 36°59'22.2"N 122°03'46.0"W
-let currentPlayerLocation = { ...playerInitialLocation }; // Track player's current position
+let currentPlayerLocation = { ...playerInitialLocation }; // 跟踪玩家当前位置
 
-// Create the map
-const map = L.map("map").setView([
-  playerInitialLocation.lat,
-  playerInitialLocation.lng,
-], 15);
+// 创建地图
+const map = L.map("map").setView([playerInitialLocation.lat, playerInitialLocation.lng], 15);
 L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
   maxZoom: 19,
 }).addTo(map);
 
-// Player marker
-const playerMarker = L.marker([
-  playerInitialLocation.lat,
-  playerInitialLocation.lng,
-]).addTo(map)
+// 玩家标记
+const playerMarker = L.marker([playerInitialLocation.lat, playerInitialLocation.lng]).addTo(map)
   .bindPopup("You are here!")
   .openPopup();
 
-// Grid and Flyweight pattern setup
-const gridSize = 0.0001; // Each grid cell's width/height
-interface Cell {
-  i: number; // Grid cell row
-  j: number; // Grid cell column
-}
-
-// Flyweight Board for Cells
-class Board {
-  private readonly knownCells: Map<string, Cell> = new Map();
-
-  private latLngToCell(lat: number, lng: number): Cell {
-    const i = Math.floor(lat / gridSize);
-    const j = Math.floor(lng / gridSize);
-    return { i, j };
-  }
-
-  public getCanonicalCell(lat: number, lng: number): Cell {
-    const cell = this.latLngToCell(lat, lng);
-    const key = `${cell.i},${cell.j}`;
-    if (!this.knownCells.has(key)) {
-      this.knownCells.set(key, cell);
-    }
-    return this.knownCells.get(key)!;
-  }
-}
-
+// 初始化 Board 和 CacheManager，使用依赖注入
 const board = new Board();
+const cacheManager = new CacheManager(board);
 
-// Cache and Memento setup
-type Coin = { i: number; j: number; serial: number };
-class Cache {
-  lat: number;
-  lng: number;
-  coins: Coin[];
-
-  constructor(lat: number, lng: number, coins: Coin[]) {
-    this.lat = lat;
-    this.lng = lng;
-    this.coins = coins;
-  }
-
-  toMemento(): string {
-    return JSON.stringify({ coins: this.coins });
-  }
-
-  fromMemento(memento: string): void {
-    const state = JSON.parse(memento);
-    this.coins = state.coins;
-  }
-}
-
-class CacheManager {
-  private readonly caches: Map<string, Cache> = new Map();
-  private readonly mementos: Map<string, string> = new Map();
-
-  public getCache(lat: number, lng: number): Cache | null {
-    const cell = board.getCanonicalCell(lat, lng);
-    const key = `${cell.i},${cell.j}`;
-
-    // If the cache already exists, return it
-    if (this.caches.has(key)) {
-      return this.caches.get(key)!;
-    }
-
-    if (Math.random() < 0.1) {
-      const coins = createCoinsForCache(
-        lat,
-        lng,
-        Math.floor(Math.random() * 5) + 1,
-      );
-      const cache = new Cache(lat, lng, coins);
-      this.caches.set(key, cache);
-      return cache;
-    }
-
-    return null;
-  }
-
-  public restoreCacheState(lat: number, lng: number): void {
-    const cell = board.getCanonicalCell(lat, lng);
-    const key = `${cell.i},${cell.j}`;
-    const memento = this.mementos.get(key);
-    if (memento && this.caches.has(key)) {
-      this.caches.get(key)!.fromMemento(memento);
-    }
-  }
-
-  public getCachesNear(lat: number, lng: number, radius: number): Cache[] {
-    const result: Cache[] = [];
-    for (let i = -radius; i <= radius; i++) {
-      for (let j = -radius; j <= radius; j++) {
-        const nearbyLat = lat + i * gridSize;
-        const nearbyLng = lng + j * gridSize;
-        const cache = this.getCache(nearbyLat, nearbyLng);
-
-        // Only add non-null caches to the result
-        if (cache !== null) {
-          result.push(cache);
-        }
-      }
-    }
-    return result;
-  }
-}
-
-const cacheManager = new CacheManager();
-
-function createCoinsForCache(lat: number, lng: number, count: number): Coin[] {
-  const cell = board.getCanonicalCell(lat, lng);
-  const coins: Coin[] = [];
-  for (let serial = 0; serial < count; serial++) {
-    coins.push({ i: cell.i, j: cell.j, serial });
-  }
-  return coins;
-}
-
-// Player inventory to track collected coins
+// 玩家库存，用于跟踪收集的金币
 let playerInventory: Coin[] = [];
 
-// Collect coins from cache
+// 收集缓存中的金币
 function collectCoins(lat: number, lng: number) {
   const cache = cacheManager.getCache(lat, lng);
   if (cache && cache.coins.length > 0) {
     playerInventory = playerInventory.concat(cache.coins);
-    cache.coins = []; // Clear coins from cache
+    cache.coins = []; // 清除缓存中的金币
     updateStatusPanel(`Collected coins! Inventory: ${playerInventory.length}`);
     showCacheDetails(cache);
     refreshPopupContent(cache);
@@ -158,12 +44,12 @@ function collectCoins(lat: number, lng: number) {
   }
 }
 
-// Deposit coins into cache
+// 存入金币到缓存
 function depositCoins(lat: number, lng: number) {
   const cache = cacheManager.getCache(lat, lng);
   if (cache && playerInventory.length > 0) {
     cache.coins = cache.coins.concat(playerInventory);
-    playerInventory = []; // Clear player's inventory
+    playerInventory = []; // 清除玩家的库存
     updateStatusPanel("Deposited coins!");
     showCacheDetails(cache);
     refreshPopupContent(cache);
@@ -172,7 +58,7 @@ function depositCoins(lat: number, lng: number) {
   }
 }
 
-// Refresh popup content
+// 刷新弹出内容
 function refreshPopupContent(cache: Cache) {
   const marker = L.marker([cache.lat, cache.lng]).addTo(map);
   marker.bindPopup(`
@@ -182,19 +68,15 @@ function refreshPopupContent(cache: Cache) {
     `).openPopup();
 }
 
-// Update visible caches near the player
+// 更新玩家附近可见的缓存
 function updateVisibleCaches() {
-  map.eachLayer((layer: any) => {
+  map.eachLayer((layer: L.Layer) => {
     if (layer instanceof L.Marker && layer !== playerMarker) {
       map.removeLayer(layer);
     }
   });
 
-  const nearbyCaches = cacheManager.getCachesNear(
-    currentPlayerLocation.lat,
-    currentPlayerLocation.lng,
-    8,
-  );
+  const nearbyCaches = cacheManager.getCachesNear(currentPlayerLocation.lat, currentPlayerLocation.lng, 8);
   nearbyCaches.forEach((cache) => {
     if (cache) {
       const marker = L.marker([cache.lat, cache.lng]).addTo(map);
@@ -208,50 +90,35 @@ function updateVisibleCaches() {
   });
 }
 
-// Move the player
+// 移动玩家
 function movePlayer(direction: "north" | "south" | "east" | "west") {
   switch (direction) {
     case "north":
-      currentPlayerLocation.lat += gridSize;
+      currentPlayerLocation.lat += GRID_SIZE;
       break;
     case "south":
-      currentPlayerLocation.lat -= gridSize;
+      currentPlayerLocation.lat -= GRID_SIZE;
       break;
     case "east":
-      currentPlayerLocation.lng += gridSize;
+      currentPlayerLocation.lng += GRID_SIZE;
       break;
     case "west":
-      currentPlayerLocation.lng -= gridSize;
+      currentPlayerLocation.lng -= GRID_SIZE;
       break;
   }
 
-  playerMarker.setLatLng([
-    currentPlayerLocation.lat,
-    currentPlayerLocation.lng,
-  ]);
+  playerMarker.setLatLng([currentPlayerLocation.lat, currentPlayerLocation.lng]);
   playerMarker.openPopup();
   updateVisibleCaches();
 }
 
-// Event listeners for movement buttons
-document.getElementById("north")?.addEventListener(
-  "click",
-  () => movePlayer("north"),
-);
-document.getElementById("south")?.addEventListener(
-  "click",
-  () => movePlayer("south"),
-);
-document.getElementById("east")?.addEventListener(
-  "click",
-  () => movePlayer("east"),
-);
-document.getElementById("west")?.addEventListener(
-  "click",
-  () => movePlayer("west"),
-);
+// 运动按钮的事件监听器
+document.getElementById("north")?.addEventListener("click", () => movePlayer("north"));
+document.getElementById("south")?.addEventListener("click", () => movePlayer("south"));
+document.getElementById("east")?.addEventListener("click", () => movePlayer("east"));
+document.getElementById("west")?.addEventListener("click", () => movePlayer("west"));
 
-// Helper functions
+// 辅助函数
 function updateStatusPanel(message: string) {
   const statusPanel = document.getElementById("statusPanel");
   if (statusPanel) {
@@ -262,7 +129,7 @@ function updateStatusPanel(message: string) {
 let isAutoUpdating = false;
 let watchId: number | null = null;
 
-// Enable or disable automatic geolocation
+// 启用或禁用自动地理定位
 function toggleGeolocation() {
   if (isAutoUpdating) {
     if (watchId !== null) navigator.geolocation.clearWatch(watchId);
@@ -277,10 +144,7 @@ function toggleGeolocation() {
       (position) => {
         currentPlayerLocation.lat = position.coords.latitude;
         currentPlayerLocation.lng = position.coords.longitude;
-        movePlayerToLocation(
-          currentPlayerLocation.lat,
-          currentPlayerLocation.lng,
-        );
+        movePlayerToLocation(currentPlayerLocation.lat, currentPlayerLocation.lng);
         updateStatusPanel("Geolocation updates enabled.");
       },
       (error) => {
@@ -296,7 +160,7 @@ document.getElementById("geolocation")?.addEventListener("click", () => {
   toggleGeolocation();
 });
 
-// Move the player to a specific location
+// 移动玩家到特定位置
 function movePlayerToLocation(lat: number, lng: number) {
   currentPlayerLocation.lat = lat;
   currentPlayerLocation.lng = lng;
@@ -305,19 +169,11 @@ function movePlayerToLocation(lat: number, lng: number) {
   renderMovementHistory();
 }
 
-// Add event listener for 🌐 button
-document.getElementById("geolocation")?.addEventListener(
-  "click",
-  toggleGeolocation,
-);
-
-// Save game state to localStorage
+// 保存游戏状态到 localStorage
 function saveGameState() {
   const state = {
     playerLocation: currentPlayerLocation,
-    caches: Array.from(cacheManager["caches"].entries()).map((
-      [key, cache],
-    ) => ({
+    caches: Array.from(cacheManager["caches"].entries()).map(([key, cache]) => ({
       key,
       lat: cache.lat,
       lng: cache.lng,
@@ -327,14 +183,21 @@ function saveGameState() {
   localStorage.setItem("gameState", JSON.stringify(state));
 }
 
-// Load game state from localStorage
+interface CacheData {
+  key: string;
+  lat: number;
+  lng: number;
+  coins: Coin[];
+}
+
+// 从 localStorage 加载游戏状态
 function loadGameState() {
   const savedState = localStorage.getItem("gameState");
   if (savedState) {
     const state = JSON.parse(savedState);
     currentPlayerLocation = state.playerLocation;
-    state.caches.forEach((cacheData: any) => {
-      const cache = new Cache(cacheData.lat, cacheData.lng, cacheData.coins);
+    state.caches.forEach((cacheData: CacheData) => {
+      const cache = new Cache(cacheData.lat, cacheData.lng, cacheData.coins); // 使用 Cache 类
       cacheManager["caches"].set(cacheData.key, cache);
     });
     movePlayerToLocation(currentPlayerLocation.lat, currentPlayerLocation.lng);
@@ -347,18 +210,16 @@ window.addEventListener("beforeunload", saveGameState);
 let movementHistory: L.LatLng[] = [];
 let movementPolyline: L.Polyline | null = null;
 
-// Render movement history as a polyline
+// 将运动历史渲染为折线
 function renderMovementHistory() {
-  movementHistory.push(
-    L.latLng(currentPlayerLocation.lat, currentPlayerLocation.lng),
-  );
+  movementHistory.push(L.latLng(currentPlayerLocation.lat, currentPlayerLocation.lng));
   if (movementPolyline) {
     map.removeLayer(movementPolyline);
   }
   movementPolyline = L.polyline(movementHistory, { color: "blue" }).addTo(map);
 }
 
-// Reset game state
+// 重置游戏状态
 function resetGameState() {
   const confirmation = prompt(
     "Are you sure you want to reset the game? This will erase all progress and location history. (Yes/No)",
@@ -379,41 +240,38 @@ function resetGameState() {
   }
 }
 
-// Add event listener for 🚮 button
+// 🚮 按钮的事件监听器
 document.getElementById("reset")?.addEventListener("click", resetGameState);
 
-// Center the map on a coin's home cache
+// 将地图中心定位到金币的主缓存
 function centerMapOnCoin(coin: Coin) {
-  const cache = cacheManager.getCache(coin.i * gridSize, coin.j * gridSize);
+  const cache = cacheManager.getCache(coin.i * GRID_SIZE, coin.j * GRID_SIZE);
   if (cache) {
     map.setView([cache.lat, cache.lng], 15);
     updateStatusPanel(`Centered on cache: i=${coin.i}, j=${coin.j}`);
   }
 }
 
-// Update cache details to include clickable coin identifiers
+// 更新缓存详情以包括可点击的金币标识符
 function showCacheDetails(cache: Cache) {
   const cacheDetailPanel = document.getElementById("cacheDetailPanel");
   if (cacheDetailPanel) {
     cacheDetailPanel.innerHTML = `
             <h3>Cache Details</h3>
-            <p><strong>Coordinates:</strong> i=${
-      cache.coins[0]?.i || "N/A"
-    }, j=${cache.coins[0]?.j || "N/A"}</p>
+            <p><strong>Coordinates:</strong> i=${cache.coins[0]?.i || "N/A"}, j=${cache.coins[0]?.j || "N/A"}</p>
             <p><strong>Coins:</strong> ${
-      cache.coins.length > 0
-        ? cache.coins.map((coin) =>
-          `<span class="coin-link" onclick="centerMapOnCoin(${
-            JSON.stringify(coin)
-          })">${coin.i}:${coin.j}#${coin.serial}</span>`
-        ).join(", ")
-        : "No coins"
-    }</p>
+              cache.coins.length > 0
+                ? cache.coins.map((coin) =>
+                  `<span class="coin-link" onclick="centerMapOnCoin(${JSON.stringify(coin)})">${coin.i}:${coin.j}#${coin.serial}</span>`
+                ).join(", ")
+                : "No coins"
+            }</p>
         `;
     cacheDetailPanel.style.display = "block";
   }
 }
 
+// 将函数暴露到全局作用域，以便在 HTML 中的 `onclick` 事件中调用
 (window as any).centerMapOnCoin = centerMapOnCoin;
 (window as any).collectCoins = collectCoins;
 (window as any).depositCoins = depositCoins;
